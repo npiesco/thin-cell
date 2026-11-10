@@ -82,6 +82,45 @@ macro_rules! thin_cell {
                 }
             }
 
+            /// Creates a new `ThinCell` wrapping the given data, unless the allocator
+            /// refuses its allocation.
+            ///
+            /// Refused, nothing is allocated and the data is handed back in [`Err`],
+            /// where [`ThinCell::new`] would abort.
+            ///
+            /// # Examples
+            ///
+            /// ```
+            /// # use thin_cell::unsync::ThinCell;
+            /// let cell = ThinCell::try_new(5).unwrap();
+            /// assert_eq!(*cell.borrow(), 5);
+            /// ```
+            pub fn try_new(data: T) -> Result<Self, T> {
+                // `Inner` always holds its metadata word, so its layout is never zero-sized
+                let layout = std::alloc::Layout::new::<Inner<T>>();
+                // SAFETY: the layout is not zero-sized
+                let Some(ptr) = NonNull::new(unsafe { std::alloc::alloc(layout) } as *mut Inner<T>)
+                else {
+                    return Err(data);
+                };
+
+                // SAFETY: the block was just allocated with `Inner<T>`'s layout and nothing
+                // reads it yet; it is freed with that same layout, as a box of `Inner<T>` or by
+                // the last `Weak`, through the global allocator it came from
+                unsafe {
+                    ptr.as_ptr().write(Inner {
+                        metadata: 0,
+                        state: State::new(),
+                        data: UnsafeCell::new(data),
+                    })
+                };
+
+                Ok(ThinCell {
+                    ptr: ptr.cast(),
+                    _marker: PhantomData,
+                })
+            }
+
             /// Consumes the `ThinCell` and try to get inner value.
             ///
             /// Returns the inner value in [`Ok`] if there are no other owners and it is
