@@ -409,6 +409,20 @@ macro_rules! thin_cell {
                 self.ptr.as_ptr()
             }
 
+            /// Returns a raw pointer to the value, without borrowing it: unlike
+            /// [`borrow`](Self::borrow), this neither panics nor waits while the
+            /// value is borrowed.
+            ///
+            /// The pointer stays valid for as long as the allocation does.
+            /// Reading or writing through it is subject to the same rules as
+            /// through [`UnsafeCell::get`], while the value is borrowed as well.
+            pub fn as_data_ptr(&self) -> *mut T {
+                let inner = self.inner_ptr();
+                // SAFETY: `inner` points to the live allocation, and the place
+                // of the value is projected without making a reference to it.
+                unsafe { UnsafeCell::raw_get(&raw const (*inner).data) }
+            }
+
             /// Returns `true` if the two `ThinCell`s point to the same allocation.
             pub fn ptr_eq(&self, other: &Self) -> bool {
                 std::ptr::eq(self.as_ptr(), other.as_ptr())

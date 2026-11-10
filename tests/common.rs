@@ -260,6 +260,34 @@ macro_rules! testcases {
         }
 
         #[test]
+        fn test_data_ptr_while_borrowed() {
+            #[repr(align(64))]
+            struct Aligned(u32);
+
+            impl Greeter for Aligned {
+                fn greet(&self) {
+                    println!("Aligned {}", self.0);
+                }
+
+                fn set_id(&mut self, id: u32) {
+                    self.0 = id;
+                }
+            }
+
+            let cell = unsafe { ThinCell::<dyn Greeter>::new_unsize(Aligned(7), |p| p as _) };
+            let before = cell.as_data_ptr();
+            let mut guard = cell.borrow();
+            let borrowed: *mut dyn Greeter = &mut *guard;
+            assert_eq!(
+                cell.as_data_ptr().cast::<()>(),
+                before.cast::<()>(),
+                "the pointer is had while borrowed"
+            );
+            assert_eq!(before.cast::<()>(), borrowed.cast::<()>());
+            assert_eq!(before.addr() % 64, 0, "the value's own alignment is kept");
+        }
+
+        #[test]
         fn test_cast_back() {
             let cell_dyn =
                 unsafe { ThinCell::<dyn Greeter>::new_unsize(Robot { id: 114 }, |p| p as _) };
